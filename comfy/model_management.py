@@ -4,6 +4,7 @@ from comfy.cli_args import args
 import comfy.utils
 import torch
 import sys
+import os.path
 
 class VRAMState(Enum):
     DISABLED = 0    #No vram present: no need to move models to vram
@@ -86,14 +87,25 @@ def get_torch_device():
         else:
             return torch.device(torch.cuda.current_device())
 
+def get_containerd_memory_limit():
+    cgroup_memory_limit = '/sys/fs/cgroup/memory/memory.limit_in_bytes'
+    if os.path.isfile(cgroup_memory_limit):
+        with open(cgroup_memory_limit, 'r') as f:
+            return int(f.read())
+    return 0
+
 def get_total_memory(dev=None, torch_total_too=False):
     global directml_enabled
     if dev is None:
         dev = get_torch_device()
 
     if hasattr(dev, 'type') and (dev.type == 'cpu' or dev.type == 'mps'):
-        mem_total = psutil.virtual_memory().total
-        mem_total_torch = mem_total
+        mem_total = get_containerd_memory_limit()
+        if mem_total > 0:
+            mem_total_torch = mem_total
+        else:
+            mem_total = psutil.virtual_memory().total
+            mem_total_torch = mem_total
     else:
         if directml_enabled:
             mem_total = 1024 * 1024 * 1024 #TODO
@@ -116,7 +128,7 @@ def get_total_memory(dev=None, torch_total_too=False):
         return mem_total
 
 total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
-total_ram = psutil.virtual_memory().total / (1024 * 1024)
+total_ram = get_total_memory(torch.device("cpu")) / (1024 * 1024)
 print("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
 if not args.normalvram and not args.cpu:
     if lowvram_available and total_vram <= 4096:
@@ -661,8 +673,14 @@ def get_free_memory(dev=None, torch_free_too=False):
         dev = get_torch_device()
 
     if hasattr(dev, 'type') and (dev.type == 'cpu' or dev.type == 'mps'):
-        mem_free_total = psutil.virtual_memory().available
-        mem_free_torch = mem_free_total
+        mem_total = get_containerd_memory_limit()
+        if mem_total > 0:
+            mem_used_total = psutil.virtual_memory().used
+            mem_free_total = mem_total - mem_used_total
+            mem_free_torch = mem_free_total
+        else:
+            mem_free_total = psutil.virtual_memory().available
+            mem_free_torch = mem_free_total
     else:
         if directml_enabled:
             mem_free_total = 1024 * 1024 * 1024 #TODO
@@ -709,6 +727,7 @@ def is_device_mps(device):
 
 def is_device_cuda(device):
     return is_device_type(device, 'cuda')
+
 
 def should_use_fp16(device=None, model_params=0, prioritize_performance=True, manual_cast=False):
     global directml_enabled
