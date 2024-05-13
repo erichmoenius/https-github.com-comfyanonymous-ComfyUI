@@ -6,17 +6,22 @@ import { ComfySettingsDialog } from "./ui/settings.js";
 export const ComfyDialog = _ComfyDialog;
 
 /**
- * 
- * @param { string } tag HTML Element Tag and optional classes e.g. div.class1.class2
- * @param { string | Element | Element[] | {
+ * @template { string | (keyof HTMLElementTagNameMap) } K
+ * @typedef { K extends keyof HTMLElementTagNameMap ? HTMLElementTagNameMap[K] : HTMLElement } ElementType 
+ */
+
+/**
+ * @template { string | (keyof HTMLElementTagNameMap) } K 
+ * @param { K } tag HTML Element Tag and optional classes e.g. div.class1.class2
+ * @param { string | Element | Element[] | ({
  * 	 parent?: Element,
- *   $?: (el: Element) => void, 
+ *   $?: (el: ElementType<K>) => void, 
  *   dataset?: DOMStringMap,
- *   style?: CSSStyleDeclaration,
+ *   style?: Partial<CSSStyleDeclaration>,
  * 	 for?: string
- * } | undefined } propsOrChildren 
- * @param { Element[] | undefined } [children]
- * @returns 
+ * } & Omit<Partial<ElementType<K>>, "style">) | undefined } [propsOrChildren]
+ * @param { string | Element | Element[] | undefined } [children]
+ * @returns { ElementType<K> }
  */
 export function $el(tag, propsOrChildren, children) {
 	const split = tag.split(".");
@@ -54,7 +59,7 @@ export function $el(tag, propsOrChildren, children) {
 
 			Object.assign(element, propsOrChildren);
 			if (children) {
-				element.append(...(children instanceof Array ? children : [children]));
+				element.append(...(children instanceof Array ? children.filter(Boolean) : [children]));
 			}
 
 			if (parent) {
@@ -372,6 +377,8 @@ export class ComfyUI {
 			},
 		});
 
+		this.loadFile = () => fileInput.click();
+
 		const autoQueueModeEl = toggleSwitch(
 			"autoQueueMode",
 			[
@@ -592,6 +599,7 @@ export class ComfyUI {
 				onclick: () => app.refreshComboInNodes()
 			}),
 			$el("button", {id: "comfy-clipspace-button", textContent: "Clipspace", onclick: () => app.openClipspace()}),
+			$el("button", {id: "comfy-reset-view-button", textContent: "Reset View", onclick: () => app.resetView()}),
 			$el("button", {
 				id: "comfy-clear-button", textContent: "Clear", onclick: () => {
 					if (!confirmClear.value || confirm("Clear workflow?")) {
@@ -621,7 +629,7 @@ export class ComfyUI {
 			name: "Enable Dev mode Options",
 			type: "boolean",
 			defaultValue: false,
-			onChange: function(value) { document.getElementById("comfy-dev-save-api-button").style.display = value ? "block" : "none"},
+			onChange: function(value) { document.getElementById("comfy-dev-save-api-button").style.display = value ? "flex" : "none"},
 		});
 
 		dragElement(this.menuContainer, this.settings);
