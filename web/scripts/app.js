@@ -1591,13 +1591,24 @@ export class ComfyApp {
 		}
 
 		// Save current workflow automatically
-		setInterval(() => {
+		function throttle(callback, minInterval) {
+			let lastCall = 0;
+			return function (...args) {
+				const now = Date.now();
+				if (now - lastCall >= minInterval) {
+					lastCall = now;
+					return callback(...args);
+				}
+			};
+		}
+		const throttledWorkflowSave = throttle(() => {
 			const workflow = JSON.stringify(this.graph.serialize());
 			localStorage.setItem("workflow", workflow);
 			if (api.clientId) {
 				sessionStorage.setItem(`workflow:${api.clientId}`, workflow);
 			}
-		}, 1000);
+		}, 256);
+		api.addEventListener("graphChanged", throttledWorkflowSave);
 
 		this.#addDrawNodeHandler();
 		this.#addDrawGroupsHandler();
