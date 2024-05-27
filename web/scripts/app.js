@@ -1601,8 +1601,8 @@ export class ComfyApp {
 				}
 			};
 		}
-		const throttledWorkflowSave = throttle(() => {
-			const workflow = JSON.stringify(this.graph.serialize());
+		const throttledWorkflowSave = throttle((changeEvent) => {
+			const workflow = JSON.stringify(changeEvent.detail);
 			localStorage.setItem("workflow", workflow);
 			if (api.clientId) {
 				sessionStorage.setItem(`workflow:${api.clientId}`, workflow);
