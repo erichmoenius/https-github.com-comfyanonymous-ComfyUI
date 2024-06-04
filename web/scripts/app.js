@@ -8,6 +8,9 @@ import { addDomClippingSetting } from "./domWidget.js";
 import { createImageHost, calculateImageGrid } from "./ui/imagePreview.js"
 
 export const ANIM_PREVIEW_WIDGET = "$$comfy_animation_preview"
+let opts = { icon_size: 14, icon_margin: 3 }
+            const iconSize = opts.icon_size ? opts.icon_size : 14;
+            const iconMargin = opts.icon_margin ? opts.icon_margin : 3;
 
 function sanitizeNodeName(string) {
 	let entityMap = {
@@ -818,6 +821,57 @@ export class ComfyApp {
 				}
 			}
 		};
+
+        const mouseDown = node.prototype.onMouseMove
+        node.prototype.onMouseDown = function (e, localPos, canvas) {
+            const padding = 10;
+            const r = mouseDown ? mouseDown.apply(this, arguments) : undefined
+            const iconX = this.size[0] - iconSize - iconMargin
+            const iconY = iconSize - 34
+            if (
+                localPos[0] > iconX - padding &&
+                localPos[0] < iconX + iconSize + padding &&
+                localPos[1] > iconY - padding &&
+                localPos[1] < iconY + iconSize + padding
+            ) {
+                if (this.show_description === undefined) {
+                    this.show_description = true;
+                } else {
+                    this.show_description = !this.show_description;
+                }
+            } else {
+                this.show_description = false;
+            }
+            return r;
+        }
+
+        const onDrawForeground = node.prototype.onDrawForeground;
+        node.prototype.onDrawForeground = function (ctx) {
+            // Add a helper tooltip that displays the description field of the node definition
+            const me = onDrawForeground?.apply?.(this, arguments);
+            
+            const x = this.size[0] - iconSize - iconMargin
+            ctx.save()
+            ctx.translate(x, iconSize - 35) // Position the icon on the canvas
+            ctx.scale(iconSize / 32, iconSize / 32) // Scale the icon to the desired size
+            ctx.fillStyle = 'rgb(250,80,250)';
+            ctx.font = 'bold 46px monospace';
+            ctx.fillText('?', 0, 24);
+            ctx.restore()
+            
+            if (this.show_description && this.description) {
+                const textWidth = ctx.measureText(this.description).width;
+                const tooltipX = this.size[0] - textWidth - 20; // Adjust position based on the node width
+                const y = -20; // Offset from the top of the node
+                // Draw tooltip background
+                ctx.fillRect(tooltipX - 5, y - 15, textWidth + 10, 20);
+                // Draw tooltip text
+                ctx.fillStyle = '#fff'; // Text color
+                ctx.fillText(this.description, tooltipX, y);
+            }
+            
+            return me
+        }
 	}
 
 	/**
@@ -1693,7 +1747,9 @@ export class ComfyApp {
 				nodeData
 			}
 		);
+        //console.log(node)
 		node.prototype.comfyClass = nodeData.name;
+        node.prototype.description = nodeData.description;
 
 		this.#addNodeContextMenuHandler(node);
 		this.#addDrawBackgroundHandler(node, app);
@@ -1800,7 +1856,7 @@ export class ComfyApp {
 	 * @param {*} graphData A serialized graph object
 	 * @param { boolean } clean If the graph state, e.g. images, should be cleared
 	 */
-	async loadGraphData(graphData, clean = true, restore_view = true) {
+	async loadGraphData(graphData, clean = true) {
 		if (clean !== false) {
 			this.clean();
 		}
@@ -1836,7 +1892,7 @@ export class ComfyApp {
 
 		try {
 			this.graph.configure(graphData);
-			if (restore_view && this.enableWorkflowViewRestore.value && graphData.extra?.ds) {
+			if (this.enableWorkflowViewRestore.value && graphData.extra?.ds) {
 				this.canvas.ds.offset = graphData.extra.ds.offset;
 				this.canvas.ds.scale = graphData.extra.ds.scale;
 			}
