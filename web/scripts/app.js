@@ -1747,7 +1747,7 @@ export class ComfyApp {
 				nodeData
 			}
 		);
-        //console.log(node)
+        
 		node.prototype.comfyClass = nodeData.name;
         node.prototype.description = nodeData.description;
 
@@ -1856,7 +1856,7 @@ export class ComfyApp {
 	 * @param {*} graphData A serialized graph object
 	 * @param { boolean } clean If the graph state, e.g. images, should be cleared
 	 */
-	async loadGraphData(graphData, clean = true) {
+	async loadGraphData(graphData, clean = true, restore_view = true) {
 		if (clean !== false) {
 			this.clean();
 		}
@@ -1892,7 +1892,7 @@ export class ComfyApp {
 
 		try {
 			this.graph.configure(graphData);
-			if (this.enableWorkflowViewRestore.value && graphData.extra?.ds) {
+			if (restore_view && this.enableWorkflowViewRestore.value && graphData.extra?.ds) {
 				this.canvas.ds.offset = graphData.extra.ds.offset;
 				this.canvas.ds.scale = graphData.extra.ds.scale;
 			}
