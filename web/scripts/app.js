@@ -8,9 +8,6 @@ import { addDomClippingSetting } from "./domWidget.js";
 import { createImageHost, calculateImageGrid } from "./ui/imagePreview.js"
 
 export const ANIM_PREVIEW_WIDGET = "$$comfy_animation_preview"
-let opts = { icon_size: 14, icon_margin: 3 }
-            const iconSize = opts.icon_size ? opts.icon_size : 14;
-            const iconMargin = opts.icon_margin ? opts.icon_margin : 3;
 
 function sanitizeNodeName(string) {
 	let entityMap = {
@@ -25,6 +22,26 @@ function sanitizeNodeName(string) {
 	return String(string).replace(/[&<>"'`=]/g, function fromEntityMap (s) {
 		return entityMap[s];
 	});
+}
+
+/*
+* wraps a single text line into maxWidth chunks
+*/
+function wrapText(text, maxWidth = 145) {
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    for (const word of words) {
+        const potentialLine = currentLine ? `${currentLine} ${word}` : word;
+        if (potentialLine.length <= maxWidth) {
+            currentLine = potentialLine;
+        } else {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
 }
 
 /**
@@ -822,7 +839,11 @@ export class ComfyApp {
 			}
 		};
 
-        const mouseDown = node.prototype.onMouseMove
+        let opts = { icon_size: 14, icon_margin: 3 }
+        const iconSize = opts.icon_size ? opts.icon_size : 14;
+        const iconMargin = opts.icon_margin ? opts.icon_margin : 3;
+
+        const mouseDown = node.prototype.onMouseDown;
         node.prototype.onMouseDown = function (e, localPos, canvas) {
             const padding = 10;
             const r = mouseDown ? mouseDown.apply(this, arguments) : undefined
@@ -847,30 +868,59 @@ export class ComfyApp {
 
         const onDrawForeground = node.prototype.onDrawForeground;
         node.prototype.onDrawForeground = function (ctx) {
-            // Add a helper tooltip that displays the description field of the node definition
             const me = onDrawForeground?.apply?.(this, arguments);
-            
-            const x = this.size[0] - iconSize - iconMargin
             ctx.save()
-            ctx.translate(x, iconSize - 35) // Position the icon on the canvas
-            ctx.scale(iconSize / 32, iconSize / 32) // Scale the icon to the desired size
-            ctx.fillStyle = 'rgb(250,80,250)';
-            ctx.font = 'bold 46px monospace';
-            ctx.fillText('?', 0, 24);
-            ctx.restore()
             
-            if (this.show_description && this.description) {
-                const textWidth = ctx.measureText(this.description).width;
-                const tooltipX = this.size[0] - textWidth - 20; // Adjust position based on the node width
-                const y = -20; // Offset from the top of the node
-                // Draw tooltip background
-                ctx.fillRect(tooltipX - 5, y - 15, textWidth + 10, 20);
-                // Draw tooltip text
-                ctx.fillStyle = '#fff'; // Text color
-                ctx.fillText(this.description, tooltipX, y);
+            // Add a helper tooltip that displays the description field of the node definition
+            if (this.description) {
+                const x = this.size[0] - iconSize - iconMargin;
+                ctx.translate(x, iconSize - 35) // Position the icon on the canvas
+                ctx.scale(iconSize / 32, iconSize / 32) // Scale the icon to the desired size
+                ctx.fillStyle = LiteGraph.NODE_TEXT_COLOR;
+                ctx.font = 'bold 46px monospace';
+                ctx.fillText('?', 0, 24);
+
+                if (this.show_description) {
+                    let lines = [];
+                    let textWidth = 0;
+                    let font_size = 38;
+                    while (font_size > 8) {
+                        textWidth = 0;
+                        ctx.font = `50 ${font_size}px monospace`;
+                        let found = true;
+                        const max_width = this.size[0] * 2.25;
+                        lines = wrapText(this.description.replace(/[\n]+/g, ''), 40);
+                        lines.forEach(
+                            function iterator( line ) {
+                                textWidth = Math.max(textWidth, ctx.measureText(line).width);
+                                if (textWidth > max_width) {
+                                    found = false;
+                                    return;
+                                }
+                            }
+                        )
+                        if (found) break;
+                        font_size -= 1;
+                    }
+                    // Draw tooltip background
+                    ctx.fillStyle = this?.color ? this.color : LiteGraph.NODE_DEFAULT_COLOR;
+                    const border = 4;
+                    ctx.fillRect(-textWidth+font_size-border, -font_size * lines.length - 2 * font_size-border, textWidth + font_size + 2*border, font_size * lines.length + font_size + 2*border);
+                    ctx.fillStyle = LiteGraph.WIDGET_BGCOLOR;
+                    ctx.fillRect(-textWidth+font_size, -font_size * lines.length - 2 * font_size, textWidth + font_size, font_size * lines.length + font_size);
+                    ctx.fillStyle = LiteGraph.NODE_TEXT_COLOR; // Text color
+                    const y = -font_size - font_size * lines.length;
+                    lines.forEach(
+                        function iterator( line, i ) {
+                            ctx.fillText(line, -textWidth+font_size + font_size/2, i * font_size + y + font_size/2);
+                        }
+                    );
+                }
             }
+
             
-            return me
+			ctx.restore();
+            return me;
         }
 	}
 
