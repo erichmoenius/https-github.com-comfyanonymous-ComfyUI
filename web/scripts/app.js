@@ -1797,7 +1797,6 @@ export class ComfyApp {
 				nodeData
 			}
 		);
-        
 		node.prototype.comfyClass = nodeData.name;
         node.prototype.description = nodeData.description;
 
