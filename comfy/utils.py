@@ -4,8 +4,28 @@ import struct
 import comfy.checkpoint_pickle
 import safetensors.torch
 import numpy as np
+import inspect
+import os
+import re
 from PIL import Image
 import logging
+
+def get_extension_calling():
+    for frame in inspect.stack():
+        if os.sep + "custom_nodes" + os.sep in frame.filename:
+            stack_module = inspect.getmodule(frame[0])
+            if stack_module:
+                stack = []
+
+                parts = re.sub(r".*\.?custom_nodes\.([^\.]+).*", r"\1", stack_module.__name__.replace(os.sep, ".")).split(".")
+
+                while len(parts) > 0:
+                    stack.append(".".join(parts))
+                    parts.pop()
+
+                return stack
+
+    return None
 
 def load_torch_file(ckpt, safe_load=False, device=None):
     if device is None:
