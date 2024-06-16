@@ -24,6 +24,26 @@ function sanitizeNodeName(string) {
 	});
 }
 
+/*
+* wraps a single text line into maxWidth chunks
+*/
+function wrapText(text, maxWidth = 145) {
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    for (const word of words) {
+        const potentialLine = currentLine ? `${currentLine} ${word}` : word;
+        if (potentialLine.length <= maxWidth) {
+            currentLine = potentialLine;
+        } else {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
+}
+
 /**
  * @typedef {import("types/comfy").ComfyExtension} ComfyExtension
  */
@@ -818,6 +838,90 @@ export class ComfyApp {
 				}
 			}
 		};
+
+        let opts = { icon_size: 14, icon_margin: 3 }
+        const iconSize = opts.icon_size ? opts.icon_size : 14;
+        const iconMargin = opts.icon_margin ? opts.icon_margin : 3;
+
+        const mouseDown = node.prototype.onMouseDown;
+        node.prototype.onMouseDown = function (e, localPos, canvas) {
+            const padding = 10;
+            const r = mouseDown ? mouseDown.apply(this, arguments) : undefined
+            const iconX = this.size[0] - iconSize - iconMargin
+            const iconY = iconSize - 34
+            if (
+                localPos[0] > iconX - padding &&
+                localPos[0] < iconX + iconSize + padding &&
+                localPos[1] > iconY - padding &&
+                localPos[1] < iconY + iconSize + padding
+            ) {
+                if (this.show_description === undefined) {
+                    this.show_description = true;
+                } else {
+                    this.show_description = !this.show_description;
+                }
+            } else {
+                this.show_description = false;
+            }
+            return r;
+        }
+
+        const onDrawForeground = node.prototype.onDrawForeground;
+        node.prototype.onDrawForeground = function (ctx) {
+            const me = onDrawForeground?.apply?.(this, arguments);
+            ctx.save()
+            
+            // Add a helper tooltip that displays the description field of the node definition
+            if (this.description) {
+                const x = this.size[0] - iconSize - iconMargin;
+                ctx.translate(x, iconSize - 35) // Position the icon on the canvas
+                ctx.scale(iconSize / 32, iconSize / 32) // Scale the icon to the desired size
+                ctx.fillStyle = LiteGraph.NODE_TEXT_COLOR;
+                ctx.font = 'bold 46px monospace';
+                ctx.fillText('?', 0, 24);
+
+                if (this.show_description) {
+                    let lines = [];
+                    let textWidth = 0;
+                    let font_size = 38;
+                    while (font_size > 8) {
+                        textWidth = 0;
+                        ctx.font = `50 ${font_size}px monospace`;
+                        let found = true;
+                        const max_width = this.size[0] * 2.25;
+                        lines = wrapText(this.description.replace(/[\n]+/g, ''), 40);
+                        lines.forEach(
+                            function iterator( line ) {
+                                textWidth = Math.max(textWidth, ctx.measureText(line).width);
+                                if (textWidth > max_width) {
+                                    found = false;
+                                    return;
+                                }
+                            }
+                        )
+                        if (found) break;
+                        font_size -= 1;
+                    }
+                    // Draw tooltip background
+                    ctx.fillStyle = this?.color ? this.color : LiteGraph.NODE_DEFAULT_COLOR;
+                    const border = 4;
+                    ctx.fillRect(-textWidth+font_size-border, -font_size * lines.length - 2 * font_size-border, textWidth + font_size + 2*border, font_size * lines.length + font_size + 2*border);
+                    ctx.fillStyle = LiteGraph.WIDGET_BGCOLOR;
+                    ctx.fillRect(-textWidth+font_size, -font_size * lines.length - 2 * font_size, textWidth + font_size, font_size * lines.length + font_size);
+                    ctx.fillStyle = LiteGraph.NODE_TEXT_COLOR; // Text color
+                    const y = -font_size - font_size * lines.length;
+                    lines.forEach(
+                        function iterator( line, i ) {
+                            ctx.fillText(line, -textWidth+font_size + font_size/2, i * font_size + y + font_size/2);
+                        }
+                    );
+                }
+            }
+
+            
+			ctx.restore();
+            return me;
+        }
 	}
 
 	/**
@@ -1694,6 +1798,7 @@ export class ComfyApp {
 			}
 		);
 		node.prototype.comfyClass = nodeData.name;
+		node.prototype.description = nodeData.description;
 
 		this.#addNodeContextMenuHandler(node);
 		this.#addDrawBackgroundHandler(node, app);

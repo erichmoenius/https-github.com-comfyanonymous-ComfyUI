@@ -50,7 +50,7 @@ class CLIPTextEncode:
         return {"required": {"text": ("STRING", {"multiline": True, "dynamicPrompts": True}), "clip": ("CLIP", )}}
     RETURN_TYPES = ("CONDITIONING",)
     FUNCTION = "encode"
-
+    DESCRIPTION = 'Encode a text prompt using a CLIP model into an embedding that can be used to guide the diffusion model.'
     CATEGORY = "conditioning"
 
     def encode(self, clip, text):
@@ -493,7 +493,7 @@ class CheckpointLoader:
                               "ckpt_name": (folder_paths.get_filename_list("checkpoints"), )}}
     RETURN_TYPES = ("MODEL", "CLIP", "VAE")
     FUNCTION = "load_checkpoint"
-
+    DESCRIPTION = "Load a diffusion model into VRAM"
     CATEGORY = "advanced/loaders"
 
     def load_checkpoint(self, config_name, ckpt_name):
@@ -508,7 +508,7 @@ class CheckpointLoaderSimple:
                              }}
     RETURN_TYPES = ("MODEL", "CLIP", "VAE")
     FUNCTION = "load_checkpoint"
-
+    DESCRIPTION = "Load a diffusion model into VRAM"
     CATEGORY = "loaders"
 
     def load_checkpoint(self, ckpt_name):
