@@ -31,6 +31,7 @@ import comfy.model_management
 from comfy.cli_args import args
 
 import importlib
+from importlib.metadata import entry_points
 
 import folder_paths
 import latent_preview
@@ -1887,11 +1888,20 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 EXTENSION_WEB_DIRS = {}
 
+EXTENSION_MODULES_LOADED = set()
+
 def load_custom_node(module_path, ignore=set()):
     module_name = os.path.basename(module_path)
     if os.path.isfile(module_path):
         sp = os.path.splitext(module_path)
         module_name = sp[0]
+
+    if module_name in EXTENSION_MODULES_LOADED:
+        logging.warning(f"Skip loading custom nodes from {module_path}. Module already loaded.")
+        return False
+    else:
+        EXTENSION_MODULES_LOADED.add(module_name)
+    
     try:
         logging.debug("Trying to load custom node {}".format(module_path))
         if os.path.isfile(module_path):
@@ -1918,7 +1928,7 @@ def load_custom_node(module_path, ignore=set()):
                 NODE_DISPLAY_NAME_MAPPINGS.update(module.NODE_DISPLAY_NAME_MAPPINGS)
             return True
         else:
-            logging.warning(f"Skip {module_path} module for custom nodes due to the lack of NODE_CLASS_MAPPINGS.")
+            logging.warning(f"Skip loading custom nodes from {module_path}. No NODE_CLASS_MAPPINGS found in module.")
             return False
     except Exception as e:
         logging.warning(traceback.format_exc())
@@ -1951,6 +1961,48 @@ def load_custom_nodes():
                 import_message = " (IMPORT FAILED)"
             logging.info("{:6.1f} seconds{}: {}".format(n[0], import_message, n[1]))
         logging.info("")
+
+def load_custom_nodes_entry_points():
+    base_node_names = set(NODE_CLASS_MAPPINGS.keys())
+    extension_modules = set()
+
+    for ep in entry_points(group="comfyui.web_directory"):
+        if ep.module in EXTENSION_MODULES_LOADED:
+            logging.warning(f"Skip loading web_directory entry point from {ep.module}. Module already loaded.")
+            continue
+        
+        web_directory = ep.load()
+        EXTENSION_WEB_DIRS[module_name] = web_directory
+        for path in importlib.metadata.files(ep.module):
+            if path.parent.name == ep.module and path.name == web_directory:
+                EXTENSION_WEB_DIRS[ep.module] = str(path.locate())
+
+        extension_modules.add(ep.module)
+
+    for ep in entry_points(group="comfyui.node_class_mappings"):
+        if ep.module in EXTENSION_MODULES_LOADED:
+            logging.warning(f"Skip loading node_class_mappings entry point from {ep.module}. Module already loaded.")
+            continue
+        
+        class_mapping = ep.load()
+        for name in class_mapping:
+            if name not in base_node_names:
+                NODE_CLASS_MAPPINGS[name] = class_mapping[name]
+
+        extension_modules.add(ep.module)
+
+    for ep in entry_points(group="comfyui.node_display_name_mappings"):
+        if ep.module in EXTENSION_MODULES_LOADED:
+            logging.warning(f"Skip loading node_display_name_mappings entry point from {ep.module}. Module already loaded.")
+            continue
+
+        display_name_mapping = ep.load()
+        NODE_DISPLAY_NAME_MAPPINGS.update(display_name_mapping)
+        
+        extension_modules.add(ep.module)
+
+    # delay adding new module names to the guard set until after all possible entry_points are loaded
+    EXTENSION_MODULES_LOADED |= extension_modules
 
 def init_custom_nodes():
     extras_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "comfy_extras")
@@ -1998,6 +2050,7 @@ def init_custom_nodes():
         if not load_custom_node(os.path.join(extras_dir, node_file)):
             import_failed.append(node_file)
 
+    load_custom_nodes_entry_points()
     load_custom_nodes()
 
     if len(import_failed) > 0:
