@@ -1,4 +1,4 @@
-import { api } from "./api.js";
+import { api, load_saved, save_saved } from "./api.js";
 import { ComfyDialog as _ComfyDialog } from "./ui/dialog.js";
 import { toggleSwitch } from "./ui/toggleSwitch.js";
 import { ComfySettingsDialog } from "./ui/settings.js";
@@ -266,14 +266,18 @@ class ComfyList {
 
 	async show() {
 		this.element.style.display = "block";
-		this.button.textContent = "Close";
+                if (this.button) {
+			this.button.textContent = "Close";
+                }
 
 		await this.load();
 	}
 
 	hide() {
 		this.element.style.display = "none";
-		this.button.textContent = "View " + this.#text;
+		if (this.button) {
+			this.button.textContent = "View " + this.#text;
+		}
 	}
 
 	toggle() {
@@ -297,10 +301,12 @@ export class ComfyUI {
 		this.lastQueueSize = 0;
 		this.queue = new ComfyList("Queue");
 		this.history = new ComfyList("History", "history", true);
+                this.saved = new ComfyList("Saved");
 
 		api.addEventListener("status", () => {
 			this.queue.update();
 			this.history.update();
+                        this.saved.update();
 		});
 
 		const confirmClear = this.settings.addSetting({
@@ -524,9 +530,34 @@ export class ComfyUI {
 			]),
 			this.queue.element,
 			this.history.element,
+                        this.saved.element,
+                        $el("button", {
+                                id: "comfy-save-local-button",
+                                textContent: "Save",
+                                onclick: () => {
+                                        let name = prompt("Name:", "");
+                                        let list = load_saved();
+                                        const new_item = {
+                                                prompt: [
+                                                        name,
+                                                        null,
+                                                        null,
+                                                        {
+                                                                extra_pnginfo: {
+                                                                        workflow: app.graph.serialize(),
+                                                                }
+                                                        }
+                                                ],
+                                                outputs: app.nodeOutputs,
+                                        };
+                                        list[name] = new_item;
+                                        save_saved(list);
+                                        this.saved.update();
+                                },
+                        }),
 			$el("button", {
 				id: "comfy-save-button",
-				textContent: "Save",
+				textContent: "Download",
 				onclick: () => {
 					let filename = "workflow.json";
 					if (promptFilename.value) {
@@ -615,6 +646,8 @@ export class ComfyUI {
 				}
 			}),
 		]);
+                this.saved.show();
+                this.saved.update();
 
 		const devMode = this.settings.addSetting({
 			id: "Comfy.DevMode",
